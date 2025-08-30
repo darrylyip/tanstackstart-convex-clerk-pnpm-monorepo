@@ -2,41 +2,35 @@
 
 ## Overview
 
-VECTR0 uses a hybrid deployment architecture with **Cloudflare Pages** for frontend applications and **Convex Cloud** for backend services. This document provides comprehensive deployment instructions for all components.
+VECTR0 uses a full-stack deployment architecture with **Cloudflare Pages** for the TanStack Start application and **Convex Cloud** for backend services. This document provides comprehensive deployment instructions for all components.
 
 ## Deployment Strategy
 
-### Frontend Applications (Cloudflare Pages)
+### Frontend Application (Cloudflare Pages)
 
-**Three Separate Deployments:**
-1. **Admin App** (`admin.vectr0.com`)
-   - Platform: Cloudflare Pages
-   - Build Command: `pnpm build --filter=@vectr0/admin`
-   - Output Directory: `apps/admin/dist`
-   
-2. **Web App** (`app.vectr0.com`)
-   - Platform: Cloudflare Pages  
-   - Build Command: `pnpm build --filter=@vectr0/web`
-   - Output Directory: `apps/web/dist`
-   
-3. **Marketing Site** (`www.vectr0.com`)
-   - Platform: Cloudflare Pages
-   - Build Command: `pnpm build --filter=@vectr0/marketing`
-   - Output Directory: `apps/marketing/dist`
+**Single TanStack Start Deployment:**
+- **Web App** (`www.vectr0.com`)
+  - Platform: Cloudflare Pages with Functions support
+  - Build Command: `pnpm build --filter=@vectr0/web`
+  - Output Directory: `apps/web/.output/public`
+  - Static Routes: Pre-rendered at build time, served from CDN
+  - Dynamic Routes (/app/*): Server-side rendered with SPA navigation
+  - Edge Functions: Rate limiting via Cloudflare Workers
 
 ### Backend Services (Convex)
 
 **Convex Deployment:**
 - Platform: Convex Cloud
-- Build Command: `pnpm convex deploy`
+- Build Command: `pnpm --filter=@vectr0/convex deploy`
 - Deployment Method: Automatic via Convex CLI
 - Location: `packages/convex/`
+- Shared across web and future mobile apps
 
 ## Cloudflare Pages Setup
 
 ### Initial Setup (One-time per app)
 
-#### 1. Admin App Setup
+#### Web Application Setup
 
 ```bash
 # Connect repository to Cloudflare Pages
@@ -44,46 +38,34 @@ VECTR0 uses a hybrid deployment architecture with **Cloudflare Pages** for front
 2. Click "Create a project" > "Connect to Git"
 3. Select your GitHub repository
 4. Configure build settings:
-   - Project name: vectr0-admin
+   - Project name: vectr0
    - Production branch: main
-   - Build command: pnpm build --filter=@vectr0/admin
-   - Build output directory: apps/admin/dist
+   - Build command: pnpm build --filter=@vectr0/web
+   - Build output directory: apps/web/.output/public
    - Root directory: /
    - Node version: 20.x
 ```
 
 **Environment Variables:**
 ```
-VITE_CONVEX_URL=<your-convex-deployment-url>
-VITE_CLERK_PUBLISHABLE_KEY=<clerk-key>
-VITE_APP_URL=https://admin.vectr0.com
-VITE_ENVIRONMENT=production
+# Public variables (available in browser)
+PUBLIC_CONVEX_URL=<your-convex-deployment-url>
+PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-key>
+PUBLIC_APP_URL=https://www.vectr0.com
+PUBLIC_ENVIRONMENT=production
+
+# Server-only variables (for SSR/API routes)
+CLERK_SECRET_KEY=<clerk-secret>
+CONVEX_DEPLOY_KEY=<convex-deploy-key>
 ```
 
-#### 2. Web App Setup
-
-```bash
-# Same process as Admin, with:
-- Project name: vectr0-app
-- Build command: pnpm build --filter=@vectr0/web
-- Build output directory: apps/web/dist
+**Cloudflare Settings:**
 ```
-
-**Environment Variables:**
-```
-VITE_CONVEX_URL=<your-convex-deployment-url>
-VITE_CLERK_PUBLISHABLE_KEY=<clerk-key>
-VITE_APP_URL=https://app.vectr0.com
-VITE_ENVIRONMENT=production
-```
-
-#### 3. Marketing Site Setup
-
-```bash
-# Same process, with:
-- Project name: vectr0-marketing
-- Build command: pnpm build --filter=@vectr0/marketing  
-- Build output directory: apps/marketing/dist
+# Page Rules for optimal caching
+1. /*            → Cache Level: Standard
+2. /app/*        → Cache Level: No Cache
+3. /_build/*     → Cache Level: Cache Everything, Edge Cache TTL: 1 year
+4. /assets/*     → Cache Level: Cache Everything, Edge Cache TTL: 1 year
 ```
 
 **Environment Variables:**
@@ -95,13 +77,12 @@ PUBLIC_ADMIN_URL=https://admin.vectr0.com
 ### Custom Domains Configuration
 
 ```bash
-# For each Cloudflare Pages project:
+# For the single Cloudflare Pages project:
 1. Go to Custom domains tab
 2. Add custom domain:
-   - admin.vectr0.com → vectr0-admin
-   - app.vectr0.com → vectr0-app
-   - www.vectr0.com → vectr0-marketing
+   - www.vectr0.com → vectr0
 3. Update DNS records (automatic if using Cloudflare DNS)
+4. Optional: Add redirect from vectr0.com → www.vectr0.com
 ```
 
 ## Convex Deployment
@@ -128,32 +109,42 @@ pnpm convex init
 
 #### Development Deployment
 ```bash
-# Deploy to dev environment
+# Deploy to dev environment from packages/convex
+cd packages/convex
 pnpm convex dev  # Starts local dev server with hot reload
+
+# Or from monorepo root
+pnpm --filter=@vectr0/convex dev
 ```
 
 #### Production Deployment
 ```bash
-# Deploy to production
+# Deploy to production from packages/convex
+cd packages/convex  
 pnpm convex deploy --prod
 
-# Or with specific deployment
-pnpm convex deploy --deployment production
+# Or from monorepo root
+pnpm --filter=@vectr0/convex deploy --prod
 ```
 
 ### Environment Variables for Convex
 
 ```bash
 # Set environment variables in Convex Dashboard
-pnpm convex env set CLERK_SECRET_KEY <value> --prod
+pnpm convex env set CLERK_WEBHOOK_SECRET <value> --prod
 pnpm convex env set OPENAI_API_KEY <value> --prod
 pnpm convex env set GOOGLE_CALENDAR_CLIENT_ID <value> --prod
 pnpm convex env set GOOGLE_CALENDAR_CLIENT_SECRET <value> --prod
+pnpm convex env set UPLOADTHING_SECRET <value> --prod
+
+# For development
+pnpm convex env set CLERK_WEBHOOK_SECRET <dev-value>
+pnpm convex env set OPENAI_API_KEY <dev-value>
 ```
 
 ## Deployment Coordination
 
-### When to Deploy Convex vs Frontend Apps
+### When to Deploy Convex vs Frontend App
 
 **Deploy Convex FIRST when:**
 - Adding new database schemas
@@ -161,14 +152,18 @@ pnpm convex env set GOOGLE_CALENDAR_CLIENT_SECRET <value> --prod
 - Modifying existing function signatures
 - Updating authentication logic
 - Changing data validation rules
+- Adding webhook endpoints
 
-**Deploy Frontend Apps AFTER Convex when:**
+**Deploy Frontend App AFTER Convex when:**
 - Consuming new Convex functions
 - Using updated data schemas
 - Implementing UI for new features
+- Adding new route protection
 
 **Can Deploy Independently:**
 - UI-only changes (CSS, layout, text)
+- Static page content updates
+- Astro component changes
 - Frontend refactoring without API changes
 - Adding frontend-only features (animations, local state)
 - Convex performance optimizations without API changes
@@ -179,18 +174,25 @@ pnpm convex env set GOOGLE_CALENDAR_CLIENT_SECRET <value> --prod
 # Recommended deployment sequence for breaking changes:
 
 1. Deploy Convex with backward compatibility
+   cd packages/convex
    pnpm convex deploy --prod
    
 2. Verify Convex deployment
    # Check Convex Dashboard for successful deployment
    # Test functions in Convex Dashboard console
+   # Verify webhooks are working
    
-3. Deploy Frontend Apps (can be parallel)
-   # Trigger GitHub Actions or manual Cloudflare Pages deploy
-   # Admin, Web, and Marketing can deploy simultaneously
+3. Deploy Frontend App
+   # Trigger GitHub Actions or push to main branch
+   # Cloudflare Pages will auto-deploy
    
-4. Remove deprecated Convex code (if applicable)
-   # After all frontends are updated
+4. Verify deployment
+   # Test authentication flow
+   # Test organization creation/switching
+   # Verify static pages load correctly
+   
+5. Remove deprecated Convex code (if applicable)
+   # After frontend is verified working
    pnpm convex deploy --prod
 ```
 

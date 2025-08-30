@@ -8,7 +8,7 @@ Add this section to your root README.md file:
 
 Ensure you have the following installed:
 - **Node.js** 20.x or higher
-- **pnpm** 8.x or higher (`npm install -g pnpm`)
+- **pnpm** 9.x or higher (`npm install -g pnpm`)
 - **Git**
 
 ### Quick Start
@@ -29,10 +29,9 @@ pnpm dev
 ```
 
 This will start:
-- 🔧 Convex dev server: http://localhost:3210
-- 🌐 Web app: http://localhost:3000
-- 🏥 Admin app: http://localhost:3001  
-- 🌐 Marketing site: http://localhost:3002
+- 🔧 Convex dev server with dashboard
+- 🌐 Web app: http://localhost:4321 (Astro hybrid)
+- 📦 Shared packages building in watch mode
 
 ### Detailed Setup
 
@@ -55,480 +54,349 @@ Create local environment files:
 # Copy root environment template
 cp .env.example .env.local
 
-# Create app-specific env files
-cp apps/admin/.env.example apps/admin/.env.local
+# Create app-specific env files  
 cp apps/web/.env.example apps/web/.env.local
-cp apps/marketing/.env.example apps/marketing/.env.local
+touch packages/convex/.env.local
 ```
 
-Edit `.env.local` with your development credentials:
+Edit `.env.local` files with your development credentials:
 
+**Root `.env.local`:**
 ```bash
-# Convex Development
-CONVEX_DEPLOYMENT=dev
-VITE_CONVEX_URL=http://localhost:3210
+# === CONVEX ===
+CONVEX_DEPLOYMENT=dev:your-dev-deployment-name
+CONVEX_URL=https://your-dev-project.convex.cloud
 
-# Clerk Auth (get from https://clerk.dev)
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
-CLERK_SECRET_KEY=sk_test_xxxxx
+# === CLOUDFLARE ===
+CF_ACCOUNT_ID=your-cloudflare-account-id
+CF_API_TOKEN=your-cloudflare-api-token
 
-# GitHub Token for shadcn-ui MCP Server
-# Create a token at https://github.com/settings/tokens
-# Required for AI-powered component development via shadcn-ui MCP server
-# Without token: 60 requests/hour | With token: 5,000 requests/hour
-GITHUB_TOKEN=ghp_xxxxx
+# === CLERK AUTH ===
+PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxx
+CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
+CLERK_WEBHOOK_SECRET=whsec_test_xxxxxxxxxxxxx
 
-# Local URLs
-VITE_APP_URL=http://localhost:3000
-VITE_ADMIN_URL=http://localhost:3001
-VITE_MARKETING_URL=http://localhost:3002
+# === APP CONFIGURATION ===
+PUBLIC_APP_URL=http://localhost:4321
+PUBLIC_ENVIRONMENT=development
+
+# === EXTERNAL SERVICES ===
+OPENAI_API_KEY=sk-xxxxxxxxxxxxx
+UPLOADTHING_SECRET=sk_test_xxxxxxxxxxxxx
+UPLOADTHING_APP_ID=test_xxxxxxx
+
+# === CALENDAR INTEGRATION ===
+GOOGLE_CALENDAR_CLIENT_ID=xxxxx.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=xxxxxxxxxxxxx
 ```
 
-#### 3. Database Setup (Convex)
+**Apps/web `.env.local`:**
+```bash
+# Astro Public Variables (available in browser)
+PUBLIC_CONVEX_URL=https://your-dev-project.convex.cloud
+PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxx
+PUBLIC_APP_URL=http://localhost:4321
+PUBLIC_ENVIRONMENT=development
+PUBLIC_ENABLE_DEBUG=true
+
+# Server-only Variables (SSR/API routes only)
+CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
+CONVEX_DEPLOY_KEY=dev:xxxxxxxxxxxxx
+```
+
+**packages/convex `.env.local`:**
+```bash
+# Convex-specific environment variables
+CLERK_WEBHOOK_SECRET=whsec_test_xxxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxxxxxxxxxxxx
+UPLOADTHING_SECRET=sk_test_xxxxxxxxxxxxx
+GOOGLE_CALENDAR_CLIENT_ID=xxxxx.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=xxxxxxxxxxxxx
+
+# Development settings
+DEBUG=true
+LOG_LEVEL=debug
+```
+
+#### 3. Convex Setup
 
 ```bash
 # Initialize Convex project (first time only)
 cd packages/convex
-npx convex init
+pnpm convex login
+pnpm convex init
 
-# Return to root
+# Return to root and start dev server
 cd ../..
-
-# Start Convex dev server
 pnpm convex:dev
 ```
 
-The Convex dev server will:
-- Run on http://localhost:3210
-- Provide a local database
-- Hot reload on schema changes
-- Show real-time logs
+This will:
+- Create a development deployment
+- Generate TypeScript types
+- Start the Convex dev server with hot reload
+- Open the Convex dashboard
 
-#### 4. Start Development Servers
+#### 4. Start Development
 
+**Option A: Start Everything (Recommended)**
 ```bash
-# Start all services (recommended)
+# Start all development servers concurrently
 pnpm dev
-
-# Or start individual services:
-pnpm dev:admin     # Admin app only
-pnpm dev:web       # Web app only
-pnpm dev:marketing # Marketing site only
-pnpm convex:dev    # Convex backend only
 ```
+
+**Option B: Start Individually**
+```bash
+# Terminal 1: Convex backend
+pnpm convex:dev
+
+# Terminal 2: Web application  
+pnpm dev:web
+```
+
+#### 5. Verify Setup
+
+Open your browser and check:
+- **Web App**: http://localhost:4321
+  - Static pages load (marketing content)
+  - `/app/dashboard` requires authentication
+- **Convex Dashboard**: Available from Convex dev server output
+  - View database tables
+  - Test functions in console
+  - Monitor real-time updates
 
 ### Development Workflow
 
-#### Working on Features
+#### Daily Development
 
 ```bash
-# Create feature branch
-git checkout -b feature/your-feature
-
-# Make changes and test locally
+# Start your day
 pnpm dev
 
-# Run tests
-pnpm test
-
-# Run type checking
-pnpm typecheck
-
-# Run linting
-pnpm lint
-
-# Fix formatting
-pnpm format
-```
-
-#### Testing Your Changes
-
-```bash
-# Run all tests
-pnpm test
-
-# Run tests in watch mode
-pnpm test:watch
-
-# Run tests for specific app
-pnpm test --filter=@vectr0/admin
-
-# Run E2E tests (requires apps running)
-pnpm test:e2e
-```
-
-#### Building Locally
-
-```bash
-# Build all apps
-pnpm build
-
-# Build specific app
-pnpm build --filter=@vectr0/admin
-
-# Preview production build
-pnpm preview
-```
-
-### Project Structure
-
-```
-vectr0/
-├── apps/                   # Frontend applications
-│   ├── admin/             # Admin dashboard (Vite + React)
-│   ├── web/               # Web app (Vite + React)
-│   └── marketing/         # Marketing site (Astro)
-├── packages/              # Shared packages
-│   ├── convex/           # Backend (Convex)
-│   ├── shared/           # Shared types & utilities
-│   ├── ui/               # Shared UI components
-│   └── config/           # Shared configurations
-├── docs/                  # Documentation
-└── scripts/              # Build & deployment scripts
-```
-
-### Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all development servers |
-| `pnpm build` | Build all applications |
-| `pnpm test` | Run all tests |
-| `pnpm lint` | Lint all code |
-| `pnpm format` | Format code with Prettier |
-| `pnpm typecheck` | Run TypeScript type checking |
-| `pnpm clean` | Clean all build outputs |
-| `pnpm convex:dev` | Start Convex dev server |
-| `pnpm dev:admin` | Start admin app only |
-| `pnpm dev:web` | Start web app only |
-| `pnpm dev:marketing` | Start marketing site only |
-
-### Common Development Tasks
-
-#### Adding a New Package
-
-```bash
-# Add to specific app
-pnpm add react-hook-form --filter=@vectr0/admin
-
-# Add to shared packages
-pnpm add date-fns --filter=@vectr0/shared
-
-# Add dev dependency to root
-pnpm add -D @types/node
-```
-
-#### Creating New Components
-
-```bash
-# Shared UI component
-mkdir -p packages/ui/src/components/NewComponent
-touch packages/ui/src/components/NewComponent/index.tsx
-
-# App-specific component
-mkdir -p apps/admin/src/components/NewFeature
-touch apps/admin/src/components/NewFeature/index.tsx
+# When you make changes to:
+# - Astro pages: Hot reload automatically
+# - React components: Hot reload automatically  
+# - Convex functions: Auto-redeploy to dev server
+# - Shared packages: Rebuild automatically with Turbo
 ```
 
 #### Working with Convex
 
 ```bash
-# Generate Convex types
-pnpm convex:codegen
-
-# Deploy to dev environment
-pnpm convex:dev
-
 # View Convex dashboard
 pnpm convex:dashboard
 
-# Run Convex function locally
-pnpm convex run functions/myFunction
+# Deploy to dev environment
+pnpm convex:deploy
+
+# View function logs
+pnpm convex:logs
+
+# Generate types after schema changes
+pnpm --filter=@vectr0/convex codegen
+```
+
+#### Working with Clerk
+
+1. **Create Development Application:**
+   - Go to https://clerk.dev/dashboard
+   - Create new application for development
+   - Copy keys to your `.env.local` files
+
+2. **Set up Organizations:**
+   - Enable organizations in Clerk settings
+   - Configure organization roles: `admin`, `user`
+   - Set up webhooks pointing to your Convex dev server
+
+3. **Test Authentication:**
+   - Visit http://localhost:3000/app/dashboard
+   - Sign up or sign in
+   - Create test organization
+
+#### Package Development
+
+```bash
+# Work on shared UI components
+cd packages/ui
+pnpm dev  # Starts in watch mode
+
+# Work on utility functions
+cd packages/utils  
+pnpm dev  # Builds in watch mode
+
+# Test packages
+pnpm test            # All packages
+pnpm test:web        # Just web app tests
 ```
 
 ### Troubleshooting
 
-#### Port Already in Use
+#### Common Issues
 
-```bash
-# Kill process on specific port
-lsof -ti:3000 | xargs kill -9
-
-# Or change port in vite.config.ts
-export default {
-  server: {
-    port: 3003 // Different port
-  }
-}
-```
-
-#### Dependency Issues
-
-```bash
-# Clear all node_modules and reinstall
-pnpm clean:deps
-pnpm install
-
-# Clear pnpm cache
-pnpm store prune
-```
-
-#### Convex Connection Issues
-
-```bash
-# Restart Convex dev server
-pnpm convex:dev --once # Run migrations
-pnpm convex:dev        # Start server
-
-# Check Convex logs
-pnpm convex logs
-```
-
-#### Environment Variable Issues
-
-```bash
-# Verify environment variables are loaded
-pnpm dev --debug
-
-# Check variable naming:
-# - Vite apps: Must start with VITE_
-# - Convex: No prefix required
-# - Astro: Must start with PUBLIC_
-```
-
-### MCP Server Integration (AI-Powered Development)
-
-#### shadcn-ui MCP Server Setup
-
-The project integrates with the shadcn-ui Model Context Protocol (MCP) server to enable AI-powered component development. This server provides AI assistants with comprehensive access to shadcn/ui components across React, Svelte, and Vue frameworks.
-
-##### Why Use the MCP Server?
-
-- **Component Discovery**: AI can browse and understand available shadcn/ui components
-- **Code Generation**: Automatically generate component implementations with proper patterns
-- **Multi-Framework Support**: Access components for React, Svelte, and Vue
-- **Usage Examples**: Get demos and best practices for component implementation
-- **Metadata Access**: Retrieve component dependencies and configuration
-
-##### GitHub Token Requirement
-
-The MCP server requires a GitHub token to function effectively:
-
-- **Without token**: Limited to 60 GitHub API requests per hour (quickly exhausted)
-- **With token**: Increases limit to 5,000 requests per hour
-- The token only needs basic authentication - no special permissions required
-
-##### Setting Up Your GitHub Token
-
-1. **Create a GitHub Personal Access Token**:
+1. **Port Conflicts:**
    ```bash
-   # Go to GitHub Settings → Developer settings → Personal access tokens
-   # Or visit: https://github.com/settings/tokens
-   # Click "Generate new token (classic)"
-   # Select minimal scopes or no scopes (just for rate limiting)
-   # Copy the generated token (starts with ghp_)
+   # Check what's using ports
+   lsof -i :3000  # TanStack Start
+   lsof -i :3001  # Convex dev server
+   
+   # Kill processes if needed
+   kill -9 <PID>
    ```
 
-2. **Add to Environment Variables**:
+2. **Environment Variable Issues:**
    ```bash
-   # Add to your .env.local file
-   GITHUB_TOKEN=ghp_your_token_here
+   # Variables not showing up in browser
+   # ❌ Wrong: CONVEX_URL (no VITE_ prefix)
+   # ✅ Correct: VITE_CONVEX_URL
+   
+   # Check TanStack Start environment loading
+   pnpm dev:web --verbose
    ```
 
-3. **Run the MCP Server** (if using with AI tools):
+3. **Convex Connection Issues:**
    ```bash
-   # Install globally
-   npm install -g @jpisnice/shadcn-ui-mcp-server
-
-   # Run with your token
-   npx @jpisnice/shadcn-ui-mcp-server --github-api-key $GITHUB_TOKEN
+   # Clear Convex cache
+   rm -rf packages/convex/.convex
+   pnpm --filter=@vectr0/convex codegen
+   
+   # Reinitialize if needed
+   cd packages/convex
+   pnpm convex init --reinit
    ```
 
-##### Benefits for Development
+4. **Clerk Authentication Issues:**
+   ```bash
+   # Verify webhook URL in Clerk dashboard
+   # Should point to: https://your-convex-dev-url.convex.cloud/clerk-webhook
+   
+   # Test webhook locally
+   curl -X POST http://localhost:3210/clerk-webhook \
+     -H "Content-Type: application/json" \
+     -d '{"test": true}'
+   ```
 
-- **Faster Component Development**: AI can instantly access component patterns
-- **Consistent Implementation**: Ensures components follow shadcn/ui best practices
-- **Cross-Framework Knowledge**: Get Vue or Svelte equivalents of React components
-- **Reduced Context Switching**: No need to manually browse documentation
+5. **pnpm Workspace Issues:**
+   ```bash
+   # Clear all node_modules and reinstall
+   pnpm clean
+   pnpm install
+   
+   # Rebuild all packages
+   pnpm build
+   ```
 
-### IDE Setup
+#### Debug Commands
 
-#### VS Code (Recommended)
+```bash
+# Health check all services
+pnpm health:all
 
-Install recommended extensions:
+# View all environment variables
+printenv | grep -E "(VITE_|CONVEX_|CLERK_)"
+
+# Test Convex functions
+cd packages/convex
+pnpm convex run queries.getAllUsers
+
+# Check package linking
+pnpm ls --depth=0
+```
+
+#### Performance Tips
+
+```bash
+# Use Turbo for faster builds
+pnpm turbo build --filter=@vectr0/web
+
+# Cache node_modules with Turbo
+export TURBO_CACHE_DIR=~/.cache/turbo
+
+# Use pnpm store for faster installs
+pnpm config set store-dir ~/.pnpm-store
+
+# Enable TanStack Start dev tools
+# Available in development mode by default
+```
+
+### Additional Setup
+
+#### Setting Up Clerk Organizations
+
+1. **Enable Organizations in Clerk Dashboard:**
+   - Go to Organization Settings
+   - Enable organizations
+   - Set maximum members per org (if needed)
+
+2. **Configure Webhook:**
+   ```bash
+   # In Clerk Dashboard → Webhooks
+   Endpoint URL: https://your-convex-dev-url.convex.cloud/clerk-webhook
+   Events: user.*, organization.*, organizationMembership.*
+   ```
+
+3. **Test Organization Flow:**
+   - Sign up as new user
+   - Create test organization
+   - Invite another test user
+   - Verify sync in Convex dashboard
+
+#### Setting Up External Services
+
+```bash
+# Uploadthing (File uploads)
+# 1. Create account at uploadthing.com
+# 2. Create new app
+# 3. Copy App ID and Secret to .env.local
+
+# OpenAI (AI features)
+# 1. Get API key from platform.openai.com
+# 2. Add to .env.local
+# 3. Start with gpt-3.5-turbo for development
+
+# Google Calendar (Optional)
+# 1. Create project in Google Cloud Console
+# 2. Enable Calendar API
+# 3. Create OAuth 2.0 credentials
+# 4. Add client ID and secret to .env.local
+```
+
+### VS Code Setup (Recommended)
+
+**Extensions:**
 ```json
 {
   "recommendations": [
-    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss", 
+    "ms-vscode.vscode-typescript-next",
     "esbenp.prettier-vscode",
-    "bradlc.vscode-tailwindcss",
-    "prisma.prisma",
-    "astro-build.astro-vscode"
+    "ms-vscode.vscode-json",
+    "ms-vscode.vscode-react"
   ]
 }
 ```
 
-Settings for `.vscode/settings.json`:
+**Settings (.vscode/settings.json):**
 ```json
 {
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
-  },
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "tailwindCSS.experimental.classRegex": [
-    ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
-  ]
+  "typescript.preferences.includePackageJsonAutoImports": "on"
 }
 ```
 
-#### WebStorm / IntelliJ
-
-1. Enable ESLint: Settings → Languages & Frameworks → JavaScript → Code Quality Tools → ESLint
-2. Enable Prettier: Settings → Languages & Frameworks → JavaScript → Prettier
-3. Set TypeScript version: Settings → Languages & Frameworks → TypeScript → Use project version
-
-### Getting Help
-
-- 📖 [Documentation](./docs)
-- 💬 [Discord Community](https://discord.gg/vectr0)
-- 🐛 [Report Issues](https://github.com/yourusername/vectr0/issues)
-- 📧 [Email Support](mailto:support@vectr0.com)
-
-### Next Steps
-
-1. **Review the architecture**: Read [docs/architecture](./docs/architecture/index.md)
-2. **Understand the data model**: Check [docs/architecture/data-models.md](./docs/architecture/data-models.md)
-3. **Learn the deployment process**: See [Deployment](#deployment) section
-4. **Start building**: Pick an issue from [GitHub Issues](https://github.com/yourusername/vectr0/issues)
-
----
-
-## For Individual App READMEs
-
-### apps/admin/README.md - Development Section
-
-```markdown
-## Development
-
-### Setup
+### Database Seeding (Optional)
 
 ```bash
-# From project root
-pnpm install
-pnpm dev:admin
+# Create seed data for development
+cd packages/convex
+
+# Add seed script to package.json:
+# "seed": "convex run seed:all"
+
+# Run seeding
+pnpm seed
 ```
 
-The admin app will be available at http://localhost:3001
-
-### Local Development
-
-```bash
-# Start dev server
-pnpm dev
-
-# Run tests
-pnpm test
-
-# Type check
-pnpm typecheck
-
-# Lint
-pnpm lint
-```
-
-### Environment Variables
-
-Create `apps/admin/.env.local`:
-
-```bash
-VITE_CONVEX_URL=http://localhost:3210
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
-VITE_APP_URL=http://localhost:3001
-VITE_ENVIRONMENT=development
-```
-```
-
-### apps/web/README.md - Development Section
-
-```markdown
-## Development
-
-### Setup
-
-```bash
-# From project root
-pnpm install
-pnpm dev:web
-```
-
-The web app will be available at http://localhost:3000
-
-### Local Development
-
-```bash
-# Start dev server
-pnpm dev
-
-# Run tests
-pnpm test
-
-# Type check
-pnpm typecheck
-
-# Lint
-pnpm lint
-```
-
-### Environment Variables
-
-Create `apps/web/.env.local`:
-
-```bash
-VITE_CONVEX_URL=http://localhost:3210
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
-VITE_APP_URL=http://localhost:3000
-VITE_ENVIRONMENT=development
-```
-```
-
-### apps/marketing/README.md - Development Section
-
-```markdown
-## Development
-
-### Setup
-
-```bash
-# From project root
-pnpm install
-pnpm dev:marketing
-```
-
-The marketing site will be available at http://localhost:3002
-
-### Local Development
-
-```bash
-# Start dev server
-pnpm dev
-
-# Build site
-pnpm build
-
-# Preview build
-pnpm preview
-```
-
-### Environment Variables
-
-Create `apps/marketing/.env.local`:
-
-```bash
-PUBLIC_APP_URL=http://localhost:3000
-PUBLIC_ADMIN_URL=http://localhost:3001
-PUBLIC_MARKETING_URL=http://localhost:3002
-PUBLIC_ENVIRONMENT=development
-```
-```
+This setup provides a streamlined development experience with the single TanStack Start application while maintaining the flexibility of the monorepo structure.
