@@ -1,0 +1,8 @@
+# Hoist linting and formatting tools for shared access
+hoist-pattern[]=*eslint*
+hoist-pattern[]=*prettier*
+hoist-pattern[]=@typescript-eslint/*
+hoist-pattern[]=eslint-*
+
+# Enable shameful hoisting for better monorepo compatibility
+shamefully-hoist=true

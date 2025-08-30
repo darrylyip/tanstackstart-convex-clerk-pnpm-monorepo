@@ -1,0 +1,8 @@
+{
+  "functions": "src",
+  "node": {
+    "externalPackages": [
+      "@vectr0/utils"
+    ]
+  }
+}

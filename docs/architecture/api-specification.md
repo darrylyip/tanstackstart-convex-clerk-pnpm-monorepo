@@ -2,7 +2,7 @@
 
 ## Convex Function Architecture
 
-Since we're using Convex, we'll implement type-safe functions instead of traditional REST APIs. All functions now require explicit organization context for multi-tenant access control.
+Since we're using Convex, we'll implement type-safe functions instead of traditional REST APIs. All functions require explicit organization context for multi-tenant access control. Clerk webhooks maintain synchronization between authentication and application data.
 
 ### Multi-Organization Authentication Pattern
 
@@ -19,21 +19,21 @@ export async function getAuthenticatedUser(
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthenticated");
 
+  // Get user by Clerk ID (synced via webhook)
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
     .unique();
-  if (!user) throw new Error("User not found");
+  if (!user) throw new Error("User not found - sync required");
 
-  // Get user's organization memberships
+  // Get user's organization memberships (synced via webhook)
   const memberships = await ctx.db
     .query("organizationMemberships")
     .withIndex("by_user", (q) => q.eq("userId", user._id))
-    .filter((q) => q.eq(q.field("status"), "active"))
     .collect();
 
   if (memberships.length === 0) {
-    throw new Error("User has no active organization memberships");
+    throw new Error("User has no organization memberships");
   }
 
   // If specific org required, verify access
@@ -45,11 +45,52 @@ export async function getAuthenticatedUser(
     return { user, membership, availableOrgs: memberships };
   }
 
-  // Return default org or first available
-  const defaultMembership = memberships.find(m => m.isDefault) || memberships[0];
-  return { user, membership: defaultMembership, availableOrgs: memberships };
+  // Return primary org or first available
+  const primaryMembership = user.organizationId 
+    ? memberships.find(m => m.organizationId === user.organizationId)
+    : memberships[0];
+  return { user, membership: primaryMembership || memberships[0], availableOrgs: memberships };
 }
 ```
+
+## Webhook Endpoints
+
+### Clerk Webhook Handler
+
+**Endpoint:** `POST /clerk-webhook`  
+**Purpose:** Synchronize Clerk users and organizations with Convex database  
+**Authentication:** Webhook signature verification  
+
+```typescript
+// convex/http.ts
+import { httpRouter } from "convex/server";
+import { clerkWebhook } from "./webhooks/clerk";
+
+const http = httpRouter();
+
+http.route({
+  path: "/clerk-webhook",
+  method: "POST", 
+  handler: clerkWebhook,
+});
+
+export default http;
+```
+
+**Supported Events:**
+- `user.created` - Creates user record in Convex
+- `user.updated` - Updates user profile data
+- `user.deleted` - Removes user and memberships
+- `organization.created` - Creates organization record  
+- `organization.updated` - Updates organization data
+- `organization.deleted` - Removes organization and all data
+- `organizationMembership.created` - Adds user to organization
+- `organizationMembership.deleted` - Removes user from organization
+
+**Security:**
+- Webhook signature verification using Svix
+- Timestamp validation to prevent replay attacks
+- Rate limiting via Cloudflare Workers
 
 ### Function Implementation Patterns
 
@@ -78,7 +119,7 @@ export const generateSchedule = mutation({
     const { user, membership } = await getAuthenticatedUser(ctx, args.organizationId);
     
     if (!["admin"].includes(membership.role)) {
-      throw new Error("Admin access required");
+      throw new Error("Organization admin access required");
     }
 
     // Fetch all required data for specified organization

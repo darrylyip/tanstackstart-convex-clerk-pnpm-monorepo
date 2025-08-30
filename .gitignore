@@ -106,7 +106,8 @@ dist-ssr/
 # Convex
 .env.local
 .env
-convex/_generated/
+**/convex/_generated/
+packages/convex/_generated/
 
 # Python
 __pycache__/
@@ -180,4 +181,8 @@ Cargo.lock
 .claude/
 .cursor/
 
-epics/
+# Monorepo specific
+**/dist/
+**/build/
+**/.turbo/
+**/.next/

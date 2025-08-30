@@ -1,27 +1,59 @@
 # Technical Assumptions
 
 ## Repository Structure
-The platform consists of three separate GitHub repositories enabling independent development and deployment:
+The platform uses a monorepo structure with pnpm workspaces, enabling code sharing across web and future mobile applications:
 
-1. **admin repository (admin.vectr0.com)**
-   - React SPA with TanStack Router (no SSR needed - authenticated app)
-   - TailwindCSS + shadcn/ui for consistent design system
-   - Recharts for analytics visualization
-   - Direct Convex integration for real-time data updates
-   - AI scheduling engine integration (OpenAI/Claude/Gemini APIs)
+### Monorepo Organization
+```
+vectr0/ (monorepo root)
+├── apps/
+│   ├── web/          # Astro hybrid app (www.vectr0.com)
+│   └── mobile/       # Future React Native app
+├── packages/
+│   ├── convex/       # Shared Convex queries, mutations, schemas
+│   ├── ui/           # Shared UI components (web/mobile compatible)
+│   └── utils/        # Shared business logic and utilities
+└── pnpm-workspace.yaml
+```
 
-2. **web repository (app.vectr0.com)**
-   - React SPA with TanStack Router (no SSR needed - authenticated app)
-   - TailwindCSS + shadcn/ui matching admin design system
-   - Calendar integration APIs (Google Calendar, CalDAV)
-   - Convex for real-time schedule updates
-   - Google Ad Manager integration for advertising revenue
+### Web Application (www.vectr0.com)
+Single Astro application with hybrid rendering:
 
-3. **marketing repository (www.vectr0.com)**
-   - Astro for static site generation with SEO optimization
-   - TailwindCSS for styling consistency
-   - Marketing content and lead generation
-   - Links to app.vectr0.com and admin.vectr0.com
+**Static Pages (SSG, CDN-optimized):**
+- Homepage, features, pricing, blog - Pre-rendered at build time
+- Zero JavaScript by default for maximum performance
+- Astro Islands for selective interactivity
+- Aggressive CDN caching for global performance
+
+**Dynamic App Routes (/app/*):**
+- React SPA with TanStack Router for authenticated users
+- TailwindCSS + shadcn/ui for consistent design system
+- Recharts for analytics visualization
+- Direct Convex integration for real-time data updates
+- AI scheduling engine integration (OpenAI/Claude/Gemini APIs)
+- Calendar integration APIs (Google Calendar, CalDAV)
+- Google Ad Manager integration for advertising revenue
+- Role-based access control for admin features
+
+### Shared Packages Architecture
+**@vectr0/convex:**
+- Shared database schema definitions
+- Reusable queries and mutations
+- Type-safe API contracts
+- Real-time subscription logic
+
+**@vectr0/ui:**
+- Platform-agnostic design tokens
+- Web components (React)
+- Mobile components (React Native - future)
+- Shared styling utilities
+
+**@vectr0/utils:**
+- Business logic and algorithms
+- Date/time manipulation
+- Schedule optimization logic
+- Validation functions
+- API client utilities
 
 ## Service Architecture
 
@@ -44,10 +76,15 @@ The platform consists of three separate GitHub repositories enabling independent
 - **Analytics:** Built-in tracking for preference fulfillment and ROI metrics
 
 **Hosting & Deployment:**
-- **Frontend Hosting:** Netlify or Cloudflare Pages for all three domains
+- **Frontend Hosting:** Netlify/Vercel/Cloudflare Pages with hybrid support
+  - Static pages served from edge CDN (aggressive caching)
+  - Dynamic app routes served from origin (with smart caching)
 - **Backend Services:** Convex cloud for serverless backend
-- **CDN:** Integrated with hosting provider for global performance
-- **Development:** Shared component library published as npm package
+- **CDN Strategy:** 
+  - Static assets and pages: Cached at edge (1 year TTL)
+  - App routes: Origin with session-based caching
+  - API routes: Direct to Convex (real-time)
+- **Development:** pnpm workspace with hot module replacement across packages
 
 ## Testing Requirements
 - **Unit Testing:** Jest/Vitest for component and utility function testing
@@ -59,19 +96,30 @@ The platform consists of three separate GitHub repositories enabling independent
 
 ## Additional Technical Decisions
 
+**Monorepo Management:**
+- pnpm workspaces for efficient dependency management
+- Shared packages for cross-platform code reuse
+- Turborepo for optimized build caching (optional)
+- Changesets for coordinated package versioning
+- Single CI/CD pipeline with selective deployment
+
 **Development Approach:**
 - TypeScript throughout for type safety and documentation
-- Shared design system and component library across repositories
-- Common API interfaces and data models
+- Shared design system via @vectr0/ui package
+- Common API interfaces via @vectr0/convex package
 - Consistent error handling and logging strategies
 - Environment-specific configuration management
+- Platform-specific entry points with shared core logic
 
 **Performance Optimization:**
-- Code splitting for optimal bundle sizes
+- Astro's selective hydration for minimal JavaScript
+- Static pages with zero runtime JS by default
+- Code splitting for app routes only
 - Image optimization through Uploadthing/CDN
 - Lazy loading for analytics dashboards
 - Efficient calendar integration with minimal API calls
 - Real-time updates only for active users
+- Edge caching for static content globally
 
 **Security Measures:**
 - Input validation and sanitization on all user data
@@ -79,3 +127,26 @@ The platform consists of three separate GitHub repositories enabling independent
 - Secure file upload handling with type validation
 - CSRF protection and secure cookie handling
 - Regular dependency updates and security scanning
+
+## Mobile Application Strategy
+
+**React Native Integration:**
+- Shared @vectr0/convex package for consistent backend integration
+- Shared @vectr0/utils for business logic reuse
+- Native performance with platform-specific UI components
+- Expo or bare React Native based on requirements
+- Unified TypeScript types across web and mobile
+
+**Code Sharing Benefits:**
+- Single source of truth for Convex schemas and functions
+- Consistent data validation and business rules
+- Shared authentication logic via Clerk SDK
+- Unified scheduling algorithms and calendar integration
+- Type-safe API contracts preventing web/mobile drift
+
+**Development Workflow:**
+- Hot reload across packages during development
+- Shared testing utilities for business logic
+- Platform-specific UI with shared logic core
+- Coordinated releases through pnpm changesets
+- Single CI/CD pipeline with matrix builds

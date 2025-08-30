@@ -11,7 +11,8 @@ packages/convex/
 ├── _generated/           # Auto-generated Convex files
 ├── functions/
 │   ├── schedules.ts      # Schedule management
-│   ├── users.ts          # User CRUD
+│   ├── users.ts          # User sync & CRUD
+│   ├── organizations.ts  # Organization sync & management
 │   ├── preferences.ts    # Preference handling
 │   ├── trades.ts         # Shift trading
 │   ├── holidays.ts       # Holiday management
@@ -20,10 +21,13 @@ packages/convex/
 │   ├── ai-scheduler.ts   # AI integration
 │   ├── calendar-sync.ts  # Calendar APIs
 │   └── notifications.ts  # Email/push notifications
+├── webhooks/
+│   └── clerk.ts          # Clerk webhook handlers
 ├── lib/
 │   ├── auth.ts          # Auth helpers
 │   ├── multi-tenant.ts  # Org isolation
 │   └── validators.ts    # Zod schemas
+├── http.ts              # HTTP router for webhooks
 └── schema.ts            # Database schema
 ```
 
@@ -88,207 +92,200 @@ export const generateSchedule = action(
 );
 ```
 
+## Webhook Architecture
+
+### Clerk Webhook Integration
+
+Clerk webhooks maintain synchronization between Clerk (authentication source of truth) and Convex (application data).
+
+```typescript
+// packages/convex/http.ts
+import { httpRouter } from "convex/server";
+import { clerkWebhook } from "./webhooks/clerk";
+
+const http = httpRouter();
+
+http.route({
+  path: "/clerk-webhook",
+  method: "POST",
+  handler: clerkWebhook,
+});
+
+export default http;
+```
+
+### Webhook Events Handled
+
+| Event Type | Action | Purpose |
+|------------|--------|----------|
+| user.created | Create user in Convex | Initial user setup |
+| user.updated | Update user data | Profile changes |
+| user.deleted | Delete user & memberships | Account removal |
+| organization.created | Create org in Convex | New tenant setup |
+| organization.updated | Update org data | Settings changes |
+| organization.deleted | Delete org & data | Tenant removal |
+| organizationMembership.created | Add user to org | Team member addition |
+| organizationMembership.deleted | Remove user from org | Team member removal |
+
+### Webhook Security
+
+```typescript
+// webhooks/clerk.ts
+import { Webhook } from "svix";
+
+export const clerkWebhook = httpAction(async (ctx, request) => {
+  // 1. Verify signature
+  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
+  const evt = wh.verify(payload, headers);
+  
+  // 2. Prevent replay attacks
+  const timestamp = parseInt(headers.get("svix-timestamp"));
+  if (Date.now() - timestamp > 5 * 60 * 1000) {
+    return new Response("Timestamp too old", { status: 400 });
+  }
+  
+  // 3. Process event
+  await processWebhookEvent(ctx, evt);
+  
+  return new Response("OK", { status: 200 });
+});
+```
+
+## Schema and Data Migrations
+
+### Convex Migration Strategy
+
+When modifying database schemas in Convex, use the migration system to safely update existing data:
+
+#### Migration Workflow
+
+```typescript
+// convex/migrations.ts
+import { migrations } from "convex/server";
+
+// Example: Adding Clerk integration fields to existing users
+export const addClerkFieldsToUsers = migrations.define({
+  table: "users",
+  migrateOne: async (ctx, user) => {
+    // Add new required fields safely
+    if (user.clerkId === undefined) {
+      await ctx.db.patch(user._id, {
+        clerkId: null, // Will be populated via webhook
+        organizationId: null,
+        organizationRole: null,
+      });
+    }
+  },
+});
+
+// Example: Data transformation migration
+export const normalizeUserRoles = migrations.define({
+  table: "users", 
+  migrateOne: async (ctx, user) => {
+    // Transform legacy role formats
+    if (user.role === "administrator") {
+      await ctx.db.patch(user._id, { role: "admin" });
+    }
+  },
+});
+```
+
+#### Schema Versioning Strategy
+
+1. **Phase 1 - Schema Preparation**: Make new fields optional
+```typescript
+// convex/schema.ts - Transitional state
+export default defineSchema({
+  users: defineTable({
+    // Existing required fields
+    email: v.string(),
+    name: v.string(),
+    
+    // New optional fields during migration
+    clerkId: v.optional(v.string()),
+    organizationId: v.optional(v.string()),
+    
+    // ... other fields
+  })
+  .index("by_email", ["email"])
+  .index("by_clerk_id", ["clerkId"]), // Index on optional field is safe
+});
+```
+
+2. **Phase 2 - Run Migration**: Deploy and execute migration
+```bash
+# Deploy schema with optional fields
+npx convex deploy
+
+# Test migration with dry run
+npx convex run migrations:addClerkFieldsToUsers --dryRun=true
+
+# Execute actual migration
+npx convex run migrations:addClerkFieldsToUsers
+
+# Monitor progress
+npx convex run migrations:status
+```
+
+3. **Phase 3 - Schema Finalization**: Make fields required after data is migrated
+```typescript
+// convex/schema.ts - Final state
+export default defineSchema({
+  users: defineTable({
+    // Now all fields are required
+    email: v.string(),
+    name: v.string(),
+    clerkId: v.string(),
+    organizationId: v.string(),
+    // ... other fields
+  })
+  .index("by_email", ["email"])
+  .index("by_clerk_id", ["clerkId"]),
+});
+```
+
+#### Migration Best Practices
+
+- **Always use optional fields** during transition periods
+- **Handle both old and new data formats** in your function code during migration
+- **Test with `dryRun: true`** before applying real migrations  
+- **Run migrations in batches** to avoid timeouts on large datasets
+- **Monitor migration progress** and be prepared to restart if needed
+- **Back up critical data** before major migrations (use Convex export)
+
+#### Migration Commands
+
+```bash
+# List all defined migrations
+npx convex run migrations:list
+
+# Check migration status
+npx convex run migrations:status
+
+# Run specific migration with dry run
+npx convex run migrations:myMigration --dryRun=true
+
+# Execute migration
+npx convex run migrations:myMigration
+
+# Cancel running migration (if needed)
+npx convex run migrations:cancel --migrationId=<id>
+```
+
 ## Database Architecture
 
-### Schema Design
+### Convex Document Schema
 
-```sql
--- Conceptual SQL representation of Convex document structure
--- Organizations (multi-tenant root)
-CREATE TABLE organizations (
-  _id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  settings JSONB NOT NULL,
-  subscription JSONB NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
-);
+Our database uses Convex's document-based architecture. For detailed schema definitions, see [Data Models](./data-models.md).
 
--- Users with organization association
-CREATE TABLE users (
-  _id TEXT PRIMARY KEY,
-  clerk_id TEXT UNIQUE NOT NULL,
-  organization_id TEXT REFERENCES organizations(_id),
-  role TEXT CHECK (role IN ('admin', 'staff', 'viewer')),
-  email TEXT NOT NULL,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  is_active BOOLEAN NOT NULL,
-  phone TEXT,
-  photo_url TEXT,
-  joined_at TIMESTAMP NOT NULL,
-  last_login_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_users_org (organization_id),
-  INDEX idx_users_clerk (clerk_id),
-  INDEX idx_users_org_role (organization_id, role)
-);
-
--- User scheduling settings
-CREATE TABLE user_scheduling_settings (
-  _id TEXT PRIMARY KEY,
-  user_id TEXT REFERENCES users(_id),
-  organization_id TEXT REFERENCES organizations(_id),
-  contract JSONB NOT NULL,
-  preferences JSONB NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_settings_user (user_id),
-  INDEX idx_settings_org (organization_id)
-);
-
--- User scheduling metrics
-CREATE TABLE user_scheduling_metrics (
-  _id TEXT PRIMARY KEY,
-  user_id TEXT REFERENCES users(_id),
-  organization_id TEXT REFERENCES organizations(_id),
-  monthly_totals JSONB NOT NULL,
-  last_calculated_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_metrics_user (user_id),
-  INDEX idx_metrics_org (organization_id)
-);
-
--- Shifts definition
-CREATE TABLE shifts (
-  _id TEXT PRIMARY KEY,
-  organization_id TEXT REFERENCES organizations(_id),
-  name TEXT NOT NULL,
-  type TEXT CHECK (type IN ('day', 'night')),
-  location TEXT,
-  priority INTEGER,
-  notes TEXT,
-  timing JSONB,
-  requirements JSONB,
-  is_active BOOLEAN NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_shifts_org (organization_id)
-);
-
--- Shift assignments
-CREATE TABLE shift_assignments (
-  _id TEXT PRIMARY KEY,
-  schedule_id TEXT REFERENCES schedules(_id),
-  shift_id TEXT REFERENCES shifts(_id),
-  user_id TEXT REFERENCES users(_id),
-  date TEXT NOT NULL,
-  status TEXT CHECK (status IN ('assigned', 'traded', 'covered')),
-  traded_from TEXT REFERENCES users(_id),
-  traded_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_assignments_schedule (schedule_id),
-  INDEX idx_assignments_user_date (user_id, date),
-  INDEX idx_assignments_date (date)
-);
-
--- Holidays
--- Base holidays (shared across all organizations)
-CREATE TABLE base_holidays (
-  _id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  month INTEGER NOT NULL CHECK (month >= 1 AND month <= 12),
-  day INTEGER NOT NULL CHECK (day >= 1 AND day <= 31),
-  is_floating BOOLEAN NOT NULL,
-  floating_rule TEXT,
-  category TEXT CHECK (category IN ('federal', 'state', 'religious', 'international')),
-  country TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_base_holidays_category (category),
-  INDEX idx_base_holidays_country (country)
-);
-
--- Organization holiday settings
-CREATE TABLE organization_holiday_settings (
-  _id TEXT PRIMARY KEY,
-  organization_id TEXT UNIQUE REFERENCES organizations(_id),
-  enabled BOOLEAN NOT NULL,
-  observed_holiday_ids TEXT[], -- Array of base_holidays._id
-  custom_holidays JSONB, -- Array of custom holiday objects
-  holiday_overrides JSONB, -- Array of override objects
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_org_holiday_settings_org (organization_id)
-);
-
--- PTO requests
-CREATE TABLE pto_requests (
-  _id TEXT PRIMARY KEY,
-  organization_id TEXT REFERENCES organizations(_id),
-  user_id TEXT REFERENCES users(_id),
-  start_date TEXT NOT NULL,
-  end_date TEXT NOT NULL,
-  reason TEXT,
-  status TEXT CHECK (status IN ('pending', 'approved', 'denied')),
-  approved_by TEXT REFERENCES users(_id),
-  approved_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_pto_org_status (organization_id, status),
-  INDEX idx_pto_user (user_id)
-);
-
--- Preference requests
-CREATE TABLE preference_requests (
-  _id TEXT PRIMARY KEY,
-  user_id TEXT REFERENCES users(_id),
-  schedule_id TEXT REFERENCES schedules(_id),
-  type TEXT CHECK (type IN ('dayOff', 'shiftType', 'pattern')),
-  dates JSONB NOT NULL,
-  details JSONB,
-  status TEXT CHECK (status IN ('pending', 'fulfilled', 'partial', 'unfulfilled')),
-  fulfillment_rate REAL,
-  created_at TIMESTAMP NOT NULL,
-  INDEX idx_preferences_user (user_id),
-  INDEX idx_preferences_schedule (schedule_id)
-);
-
--- Shift trades
-CREATE TABLE shift_trades (
-  _id TEXT PRIMARY KEY,
-  requesting_user_id TEXT REFERENCES users(_id),
-  accepting_user_id TEXT REFERENCES users(_id),
-  shift_assignment_id TEXT REFERENCES shift_assignments(_id),
-  status TEXT CHECK (status IN ('open', 'accepted', 'completed', 'cancelled')),
-  requested_at TIMESTAMP NOT NULL,
-  accepted_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  INDEX idx_trades_requesting (requesting_user_id),
-  INDEX idx_trades_status (status)
-);
-
--- Locations
-CREATE TABLE locations (
-  _id TEXT PRIMARY KEY,
-  organization_id TEXT REFERENCES organizations(_id),
-  name TEXT NOT NULL,
-  address TEXT,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_locations_org (organization_id)
-);
-
--- Schedules with period tracking
-CREATE TABLE schedules (
-  _id TEXT PRIMARY KEY,
-  organization_id TEXT REFERENCES organizations(_id),
-  period JSONB NOT NULL,
-  status TEXT CHECK (status IN ('draft', 'published', 'archived')),
-  generated_by TEXT CHECK (generated_by IN ('ai', 'manual')),
-  ai_metadata JSONB,
-  published_at TIMESTAMP,
-  published_by TEXT REFERENCES users(_id),
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL,
-  INDEX idx_schedules_org_period (organization_id, period)
-);
-```
+Key collections include:
+- **organizations** - Multi-tenant root entities synced from Clerk
+- **users** - Authentication entities synced from Clerk users  
+- **organizationMemberships** - Many-to-many user/org relationships
+- **schedulableContacts** - People who can be scheduled (may or may not have user accounts)
+- **schedules** - Scheduling periods with assignments
+- **shifts** - Shift definitions and requirements
+- **shiftAssignments** - Assignment of contacts to shifts on specific dates
 
 ## Authentication and Authorization
 

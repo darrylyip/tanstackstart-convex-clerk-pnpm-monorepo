@@ -24,28 +24,33 @@ VECTR0 uses consistent datetime field types across all models:
 
 ## Organization
 
-**Purpose:** Root tenant entity containing all organization-specific data and configuration
+**Purpose:** Root tenant entity containing all organization-specific data and configuration. Synchronized from Clerk organizations via webhooks.
 
 **Key Attributes:**
-- id: string - Unique organization identifier
+- _id: Id<"organizations"> - Convex unique identifier
+- clerkOrgId: string - Clerk organization ID (source of truth)
 - name: string - Organization display name
 - slug: string - Unique URL slug for multi-tenancy
-- settings: OrgSettings - Configuration and preferences
-- subscription: SubscriptionTier - Free/Paid for MVP
+- metadata: object - Hospital system, department, timezone
+- settings: OrgSettings - Schedule configuration and preferences
 - createdAt: number - Unix timestamp
+- updatedAt: number - Unix timestamp
 
 **TypeScript Interface:**
 ```typescript
 interface Organization {
   _id: Id<"organizations">;
+  clerkOrgId: string;  // Clerk organization ID
   name: string;
   slug: string;
-  settings: {
-    timezone: string;
-    workWeek: DayOfWeek[];
+  metadata?: {
+    hospitalSystem?: string;
+    department?: string;
+    timezone?: string;
   };
-  subscription: {
-    tier: 'free' | 'paid';
+  settings?: {
+    scheduleConfig?: any;
+    preferences?: any;
   };
   createdAt: number;
   updatedAt: number;
@@ -62,30 +67,29 @@ interface Organization {
 
 ## User
 
-**Purpose:** Authentication entity for platform users who can belong to multiple organizations
+**Purpose:** Authentication entity for platform users. Synchronized from Clerk users via webhooks. Users can belong to multiple organizations.
 
 **Key Attributes:**
-- id: string - Unique user identifier
-- clerkId: string - Clerk authentication ID
+- _id: Id<"users"> - Convex unique identifier
+- clerkUserId: string - Clerk user ID (source of truth)
 - email: string - User email address
-- firstName: string - User first name
-- lastName: string - User last name
-- isActive: boolean - Whether user is currently active
-- phone: string - Contact phone number
-- photoUrl: string - Profile photo URL
+- name: string - Full name from Clerk
+- imageUrl: string - Profile photo URL from Clerk
+- organizationId: Id<"organizations"> - Primary organization (optional)
+- role: 'admin' | 'org_admin' | 'user' - System-wide role
+- metadata: object - Additional user data from Clerk
 
 **TypeScript Interface:**
 ```typescript
 interface User {
   _id: Id<"users">;
-  clerkId: string;
+  clerkUserId: string;  // Clerk user ID
   email: string;
-  firstName: string;
-  lastName: string;
-  isActive: boolean;
-  phone?: string;
-  photoUrl?: string;
-  lastLoginAt?: number;
+  name?: string;
+  imageUrl?: string;
+  organizationId?: Id<"organizations">; // Primary org
+  role: 'super_admin' | 'admin' | 'user';
+  metadata?: any;  // From Clerk public metadata
   createdAt: number;
   updatedAt: number;
 }
@@ -93,21 +97,24 @@ interface User {
 
 **Relationships:**
 - Has many OrganizationMemberships
+- Belongs to primary Organization (optional)
 - May have linked SchedulableContacts (one per organization membership)
+
+**Indexes:**
+- `by_clerk_id` - Primary lookup by Clerk ID
+- `by_organization` - Users in an organization
+- `by_email` - Email-based queries
 
 ## OrganizationMembership
 
-**Purpose:** Junction table for many-to-many relationship between users and organizations with role-based access
+**Purpose:** Junction table for many-to-many relationship between users and organizations. Synchronized from Clerk organization memberships via webhooks.
 
 **Key Attributes:**
-- id: string - Unique membership identifier
-- userId: Id<"users"> - Associated user
-- organizationId: Id<"organizations"> - Associated organization
-- role: MembershipRole - admin | staff | guest
-- status: MembershipStatus - active | invited | suspended
-- isDefault: boolean - Whether this is the user's primary organization
+- _id: Id<"organizationMemberships"> - Unique membership identifier
+- userId: Id<"users"> - Associated Convex user
+- organizationId: Id<"organizations"> - Associated Convex organization
+- role: string - Organization-specific role from Clerk
 - joinedAt: number - When user joined organization
-- invitedBy: Id<"users"> - Who invited the user (optional)
 
 **TypeScript Interface:**
 ```typescript
@@ -115,27 +122,24 @@ interface OrganizationMembership {
   _id: Id<"organizationMemberships">;
   userId: Id<"users">;
   organizationId: Id<"organizations">;
-  role: 'admin' | 'staff' | 'guest';
-  status: 'active' | 'invited' | 'suspended';
-  isDefault: boolean;
+  role: string;  // Clerk org role: 'org_admin', 'user', etc.
   joinedAt: number;
-  invitedBy?: Id<"users">;
-  invitedAt?: number;
-  createdAt: number;
-  updatedAt: number;
 }
 ```
 
 **Relationships:**
 - Belongs to User
 - Belongs to Organization
-- References inviting User (optional)
 
 **Indexes:**
 - `by_user` - Query all organizations for a user
 - `by_organization` - Query all members of an organization  
 - `by_user_org` - Unique constraint and fast lookups
-- `by_status` - Query pending invitations
+
+**Synchronization:**
+- Created when Clerk webhook fires `organizationMembership.created`
+- Updated when Clerk webhook fires `organizationMembership.updated`
+- Deleted when Clerk webhook fires `organizationMembership.deleted`
 
 ## SchedulableContact
 

@@ -1,52 +1,106 @@
 # Frontend Architecture
 
-## Component Architecture
+## Astro Hybrid Architecture
+
+### Rendering Strategy
+- **Static Pages (SSG)**: Homepage, features, pricing, blog - pre-rendered at build time
+- **Dynamic App (/app/*)**: React SPA with client-side routing via TanStack Router
+- **Selective Hydration**: Astro Islands for interactive components on static pages
+- **Edge Caching**: Static assets served from CDN with aggressive caching
 
 ### Component Organization
 ```
 apps/web/src/
+├── pages/                  # Astro pages
+│   ├── index.astro        # Homepage (static)
+│   ├── features.astro     # Features (static)
+│   ├── pricing.astro      # Pricing (static)
+│   ├── blog/              # Blog posts (static)
+│   └── app/               # Dynamic app route
+│       └── [...all].astro # React SPA entry
 ├── components/
-│   ├── ui/                 # shadcn/ui components
-│   ├── schedule/
-│   │   ├── ScheduleCalendar.tsx
-│   │   ├── ShiftCard.tsx
-│   │   └── HolidayIndicator.tsx
-│   ├── preferences/
-│   │   ├── PreferenceForm.tsx
-│   │   ├── FulfillmentChart.tsx
-│   │   └── PreferenceHistory.tsx
-│   ├── trading/
-│   │   ├── TradeMarketplace.tsx
-│   │   ├── TradeRequest.tsx
-│   │   └── TradeCard.tsx
-│   └── shared/
-│       ├── UserAvatar.tsx
-│       ├── LoadingSpinner.tsx
-│       └── ErrorBoundary.tsx
-├── hooks/
-│   ├── useSchedule.ts
-│   ├── usePreferences.ts
-│   └── useRealtime.ts
-├── lib/
-│   ├── convex.ts
-│   └── utils.ts
-└── pages/
-    ├── Dashboard.tsx
-    ├── Schedule.tsx
-    ├── Preferences.tsx
-    └── Profile.tsx
+│   ├── marketing/         # Static marketing components
+│   │   ├── Hero.astro
+│   │   ├── Features.astro
+│   │   └── Pricing.astro
+│   └── app/               # React app components
+│       ├── schedule/
+│       │   ├── ScheduleCalendar.tsx
+│       │   ├── ShiftCard.tsx
+│       │   └── HolidayIndicator.tsx
+│       ├── preferences/
+│       │   ├── PreferenceForm.tsx
+│       │   ├── FulfillmentChart.tsx
+│       │   └── PreferenceHistory.tsx
+│       ├── trading/
+│       │   ├── TradeMarketplace.tsx
+│       │   ├── TradeRequest.tsx
+│       │   └── TradeCard.tsx
+│       └── shared/
+│           ├── UserAvatar.tsx
+│           ├── LoadingSpinner.tsx
+│           └── ErrorBoundary.tsx
+├── app/                   # React SPA
+│   ├── routes/           # TanStack Router
+│   ├── hooks/
+│   │   ├── useSchedule.ts
+│   │   ├── usePreferences.ts
+│   │   └── useRealtime.ts
+│   ├── services/
+│   ├── stores/           # Zustand stores
+│   └── main.tsx
+└── layouts/
+    ├── Marketing.astro    # Marketing layout
+    └── App.astro          # App layout
 ```
 
-### Component Template
+### Astro Page Template (Static)
+```astro
+---
+// src/pages/index.astro
+export const prerender = true; // Static at build time
+
+import Layout from '@/layouts/Marketing.astro';
+import Hero from '@/components/marketing/Hero.astro';
+import Features from '@/components/marketing/Features.astro';
+import { PricingCalculator } from '@/components/marketing/PricingCalculator';
+---
+
+<Layout title="VECTR0 - AI-Powered Healthcare Scheduling">
+  <Hero />
+  <Features />
+  <!-- Astro Island: Interactive component on static page -->
+  <PricingCalculator client:visible />
+</Layout>
+```
+
+### React App Entry (Dynamic)
+```astro
+---
+// src/pages/app/[...all].astro
+export const prerender = false; // Dynamic/SPA mode
+
+import Layout from '@/layouts/App.astro';
+---
+
+<Layout title="VECTR0 App">
+  <div id="root"></div>
+  <script>
+    import('../../app/main.tsx');
+  </script>
+</Layout>
+```
+
+### React Component Template
 ```typescript
-// components/schedule/ScheduleCalendar.tsx
+// components/app/schedule/ScheduleCalendar.tsx
 import { useState, useMemo } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '@/convex/_generated/api';
-import { Calendar } from '@/components/ui/calendar';
+import { useQuery } from '@vectr0/convex/react';
+import { api } from '@vectr0/convex';
+import { Calendar } from '@vectr0/ui/calendar';
 import { ShiftCard } from './ShiftCard';
 import { HolidayIndicator } from './HolidayIndicator';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from '@vectr0/utils/dates';
 
 interface ScheduleCalendarProps {
   scheduleId: string;
