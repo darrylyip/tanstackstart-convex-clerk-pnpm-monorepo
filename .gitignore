@@ -186,3 +186,5 @@ Cargo.lock
 **/build/
 **/.turbo/
 **/.next/
+.env
+.mcp.json

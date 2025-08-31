@@ -2,7 +2,6 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
 import { createRouter } from './router'
-import './styles.css'
 
 // Create a new router instance
 const router = createRouter()

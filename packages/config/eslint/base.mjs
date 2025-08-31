@@ -31,7 +31,11 @@ export default [
         HTMLParagraphElement: "readonly",
         HTMLHeadingElement: "readonly",
         document: "readonly",
-        window: "readonly"
+        window: "readonly",
+        // Web API globals
+        Response: "readonly",
+        Request: "readonly",
+        Headers: "readonly"
       }
     },
     rules: {

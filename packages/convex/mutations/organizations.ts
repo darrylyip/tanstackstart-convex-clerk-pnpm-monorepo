@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 
 export const create = mutation({
   args: {
+    clerkOrgId: v.string(),
     name: v.string(),
     slug: v.string(),
   },
@@ -10,8 +11,16 @@ export const create = mutation({
     const now = Date.now();
     
     return await ctx.db.insert('organizations', {
+      clerkOrgId: args.clerkOrgId,
       name: args.name,
       slug: args.slug,
+      settings: {
+        timezone: "America/New_York",
+        workWeek: [1, 2, 3, 4, 5], // Mon-Fri default
+      },
+      subscription: {
+        tier: "free",
+      },
       createdAt: now,
       updatedAt: now,
     });

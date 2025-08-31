@@ -8,22 +8,16 @@ export const get = query({
   },
 });
 
-export const listByOrganization = query({
-  args: { organizationId: v.id('organizations') },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query('users')
-      .withIndex('by_organization', (q) => q.eq('organizationId', args.organizationId))
-      .collect();
-  },
-});
+// Removed listByOrganization - users don't have a direct organizationId field
+// Use organizationMemberships table to find users in an organization
 
 export const getByEmail = query({
   args: { email: v.string() },
   handler: async (ctx, args) => {
+    // Users table doesn't have an email index, need to filter
     return await ctx.db
       .query('users')
-      .withIndex('by_email', (q) => q.eq('email', args.email))
+      .filter((q) => q.eq(q.field('email'), args.email))
       .first();
   },
 });

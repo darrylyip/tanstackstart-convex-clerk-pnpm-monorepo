@@ -1,15 +1,13 @@
-# Database Schema
-
-Since we're using Convex (document database), here's the schema definition:
-
-```typescript
-// convex/schema.ts
-
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// NOTE: This schema.ts file is now ONLY for TypeScript type generation!
+// The actual database schema is created and managed via migrations.
+// This file should match the schema defined in migrations for proper types.
+
 export default defineSchema({
   organizations: defineTable({
+    clerkOrgId: v.string(),
     name: v.string(),
     slug: v.string(),
     settings: v.object({
@@ -21,7 +19,9 @@ export default defineSchema({
     }),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_slug", ["slug"]),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_clerk_org_id", ["clerkOrgId"]),
 
   users: defineTable({
     clerkId: v.string(),
@@ -226,7 +226,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_organization", ["organizationId"]),
 
-  // PTO and preference requests (unchanged for now)
   ptoRequests: defineTable({
     userId: v.id("users"),
     organizationId: v.id("organizations"),
@@ -267,45 +266,3 @@ export default defineSchema({
     .index("by_schedule", ["scheduleId"])
     .index("by_status", ["status"]),
 });
-```
-
-## Key Schema Updates
-
-### Multi-Organization Support
-- **Removed** `organizationId` and `role` from `users` table
-- **Added** `organizationMemberships` junction table for many-to-many relationships
-- **Added** `schedulableContacts` for people who can be scheduled without user accounts
-
-### Flexible Scheduling Rules
-- **Added** `organizationSchedulingRules` for org-wide constraints and preferences
-- **Renamed** `userSchedulingSettings` → `contactSchedulingSettings`
-- **Removed** `userSchedulingMetrics` (calculated on-demand instead)
-
-### Simplified Models
-- **Flattened** `schedules.period` → direct `startDate` and `endDate` fields
-- **Simplified** `shiftAssignments` to only reference `schedulableContacts`
-- **Streamlined** status enums (removed unnecessary states)
-
-## Indexes Strategy
-
-### Primary Lookups
-- `by_user` - Find all data for a user
-- `by_organization` - Find all data for an organization
-- `by_contact` - Find all data for a schedulable contact
-
-### Unique Constraints
-- `by_clerk_id` - Ensure one user per Clerk ID
-- `by_slug` - Ensure unique organization slugs
-- `by_user_org` - One membership per user-org combination
-
-### Performance Optimizations
-- `by_date` - Quick date-based queries
-- `by_status` - Filter by status efficiently
-- `by_email`/`by_phone` - Fast contact lookups for linking
-
-## Migration Notes
-
-Since this is a greenfield project with no production data:
-1. Deploy the new schema directly
-2. No migration needed
-3. Implement multi-org support from the start

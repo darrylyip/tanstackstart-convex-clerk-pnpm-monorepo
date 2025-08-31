@@ -113,8 +113,12 @@ interface User {
 - _id: Id<"organizationMemberships"> - Unique membership identifier
 - userId: Id<"users"> - Associated Convex user
 - organizationId: Id<"organizations"> - Associated Convex organization
-- role: string - Organization-specific role from Clerk
+- role: string - Organization-specific role (super_admin, admin, user)
+- status: string - Membership status (active, invited, suspended)
+- isDefault: boolean - Whether this is the user's primary organization
 - joinedAt: number - When user joined organization
+- invitedBy: Id<"users"> - Who invited the user (optional)
+- invitedAt: number - When user was invited (optional)
 
 **TypeScript Interface:**
 ```typescript
@@ -122,8 +126,14 @@ interface OrganizationMembership {
   _id: Id<"organizationMemberships">;
   userId: Id<"users">;
   organizationId: Id<"organizations">;
-  role: string;  // Clerk org role: 'org_admin', 'user', etc.
+  role: 'super_admin' | 'admin' | 'user';
+  status: 'active' | 'invited' | 'suspended';
+  isDefault: boolean;
   joinedAt: number;
+  invitedBy?: Id<"users">;
+  invitedAt?: number;
+  createdAt: number;
+  updatedAt: number;
 }
 ```
 
