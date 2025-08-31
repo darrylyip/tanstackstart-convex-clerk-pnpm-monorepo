@@ -6,8 +6,15 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { ClerkProvider, useAuth } from "@clerk/clerk-react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ConvexReactClient } from "convex/react";
 
 import Header from "@/components/Header";
+
+import appCss from "@/styles/app.css?url";
+
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL!);
 
 export const Route = createRootRoute({
   head: () => ({
@@ -23,6 +30,7 @@ export const Route = createRootRoute({
         title: "VECTR0",
       },
     ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   component: RootComponent,
   notFoundComponent: () => (
@@ -38,16 +46,19 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <html>
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <Header />
-        <Outlet />
-        <TanStackRouterDevtools position="bottom-right" />
-        <Scripts />
-      </body>
-    </html>
+    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY!}>
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <html>
+          <head>
+            <HeadContent />
+          </head>
+          <body>
+            <Outlet />
+            <TanStackRouterDevtools position="bottom-right" />
+            <Scripts />
+          </body>
+        </html>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
   );
 }

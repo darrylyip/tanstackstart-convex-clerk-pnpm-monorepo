@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -9,6 +9,6 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "_generated/**/*"],
+  "include": ["src/**/*", "_generated/**/*", "*.ts", "lib/**/*", "functions/**/*"],
   "exclude": ["node_modules"]
 }

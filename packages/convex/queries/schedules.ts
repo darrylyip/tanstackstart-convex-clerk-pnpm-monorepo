@@ -18,24 +18,15 @@ export const listByOrganization = query({
   },
 });
 
-export const listByUser = query({
-  args: { userId: v.id('users') },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query('schedules')
-      .withIndex('by_user', (q) => q.eq('userId', args.userId))
-      .collect();
-  },
-});
+// Removed listByUser - schedules don't have a direct userId field
 
 export const listByStatus = query({
   args: { 
     organizationId: v.id('organizations'),
     status: v.union(
       v.literal('draft'),
-      v.literal('active'),
-      v.literal('completed'),
-      v.literal('cancelled')
+      v.literal('published'),
+      v.literal('archived')
     )
   },
   handler: async (ctx, args) => {
